@@ -1,0 +1,252 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  Network Template: Kor template that creates a VPC with DNS and public IPs enabled.
+
+# This template creates:
+#   VPC
+#   Internet Gateway
+#   Public Route Table
+#   Public Subnet
+Parameters:
+  AZprivate1:
+    Description: AvailabilityZone for private
+    Type: AWS::EC2::AvailabilityZone::Name
+  AZprivate2:
+    Description: AvailabilityZone for private
+    Type: AWS::EC2::AvailabilityZone::Name
+  AZpublic1:
+    Description: AvailabilityZone for public
+    Type: AWS::EC2::AvailabilityZone::Name
+  AZpublic2:
+    Description: AvailabilityZone for public
+    Type: AWS::EC2::AvailabilityZone::Name
+######################
+# Resources section
+######################
+
+Resources:
+
+  ## VPC
+
+  KorVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      CidrBlock: 10.0.0.0/16
+      Tags:
+        - Key: Name
+          Value: KorVPC
+
+
+  ## Internet Gateway
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: KorIGW
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref KorVPC
+      InternetGatewayId: !Ref InternetGateway
+
+#Elastic IP b Setting
+
+  KorEIPa:
+    Type: AWS::EC2::EIP
+    Properties:
+      Tags:
+        - Key: Name
+          Value: KorEIPa
+
+#Nat Gateway a Setting
+
+  KorNATa:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt KorEIPa.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: KorNATa
+
+#Elastic IP b Setting
+
+  KorEIPb:
+    Type: AWS::EC2::EIP
+    Properties:
+      Tags:
+        - Key: Name
+          Value: KorEIPb
+
+#Nat Gateway b Setting
+
+  KorNATb:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt KorEIPb.AllocationId
+      SubnetId: !Ref PublicSubnet2
+      Tags:
+        - Key: Name
+          Value: KorNATb
+
+  ## Public Route Table
+
+  PublicRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref KorVPC
+
+
+  PublicRTRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+
+  ## Private Route Table a
+
+  PrivateRTa:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref KorVPC
+
+
+  PrivateRTaRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PrivateRTa
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref KorNATa
+
+
+  ## Private Route Table b
+
+  PrivateRTb:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref KorVPC
+
+
+  PrivateRTbRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PrivateRTb
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref KorNATb
+
+
+
+
+  ## Public Subnet
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref KorVPC
+      CidrBlock: 10.0.0.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Ref AZpublic1
+      Tags:
+        - Key: Name
+          Value: PublicSubnet1
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref KorVPC
+      CidrBlock: 10.0.10.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Ref AZpublic2
+      Tags:
+        - Key: Name
+          Value: PublicSubnet2
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref KorVPC
+      CidrBlock: 10.0.20.0/24
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: !Ref AZprivate1
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet1
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref KorVPC
+      CidrBlock: 10.0.30.0/24
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: !Ref AZprivate2
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet2
+  PrivateRTASubnet1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRTa
+
+  PublicRTASubnet1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRT
+
+  PrivateRTASubnet2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRTb
+
+  PublicRTASubnet2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRT
+
+
+
+
+
+
+######################
+# Outputs section
+######################
+
+Outputs:
+
+  PublicSubnet1:
+    Description: The subnet ID to use for public game web servers
+    Value: !Ref PublicSubnet1
+    Export:
+      Name: !Sub '${AWS::StackName}-Subnet1'
+  PublicSubnet2:
+    Description: The subnet ID to use for public game web servers
+    Value: !Ref PublicSubnet2
+    Export:
+      Name: !Sub '${AWS::StackName}-Subnet2'
+  PrivateSubnet1:
+    Description: The subnet ID to use for private game web servers
+    Value: !Ref PrivateSubnet1
+    Export:
+      Name: !Sub '${AWS::StackName}-PSubnet1'
+  PrivateSubnet2:
+    Description: The subnet ID to use for private game web servers
+    Value: !Ref PrivateSubnet2
+    Export:
+      Name: !Sub '${AWS::StackName}-PSubnet2'
+
+  KorVPC:
+    Description: VPC ID
+    Value: !Ref KorVPC
+    Export:
+      Name: !Sub '${AWS::StackName}-KorVPCID'

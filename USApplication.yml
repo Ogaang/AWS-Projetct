@@ -1,0 +1,292 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  This template provisions an EC2 instance in a VPC Subnet provisioned in a different stack.
+
+# This template creates:
+#   Amazon EC2 instance
+#   Security Group
+
+######################
+# Parameters section
+######################
+
+Parameters:
+
+  NetworkStackName:
+    Description: >-
+      Name of an active CloudFormation stack that contains the networking
+      resources, such as the VPC and subnet that will be used in this stack.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: '^[a-zA-Z][-a-zA-Z0-9]*$'
+    Default: Project-Network-US
+  EC2KeyPairUS:
+    Type: String
+    Default: "EC2-keypairUS"
+  PublicSubnet3:
+    Description: public 3
+    Type: AWS::EC2::Subnet::Id
+  PublicSubnet4:
+    Description: public 4
+    Type: AWS::EC2::Subnet::Id
+######################
+# Resources section
+######################
+
+Resources:
+
+  GameServerInstance3:
+    Type: AWS::EC2::Instance
+    Metadata:
+      'AWS::CloudFormation::Init':
+        configSets:
+          All:
+            - ConfigureSampleApp
+        ConfigureSampleApp:
+          packages:
+            yum:
+              httpd: []
+          files:
+            /var/www/html/index.html:
+              content: |
+                <img src="<https://s3.amazonaws.com/cloudformation-examples/cloudformation_graphic.png>" alt="AWS CloudFormation Logo"/>
+                <h1>Congratulations, you have successfully launched the AWS CloudFormation sample.</h1>
+              mode: 000644
+              owner: apache
+              group: apache
+          services:
+            sysvinit:
+              httpd:
+                enabled: true
+                ensureRunning: true
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-00ee4df451840fa9d
+      KeyName: !Ref EC2KeyPairUS
+      NetworkInterfaces:
+        - GroupSet:
+            - !Ref GameServerSG
+          AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          DeleteOnTermination: true
+          SubnetId:
+            Fn::ImportValue:
+              !Sub ${NetworkStackName}-Subnet3
+      Tags:
+        - Key: Name
+          Value: Game Server
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          yum update -y aws-cfn-bootstrap
+          # Install the files and packages from the metadata
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource GameServerInstance3 --configsets All --region ${AWS::Region}
+          # Signal the status from cfn-init
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource GameServerInstance3 --region ${AWS::Region}
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+
+  DiskVolume:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 20
+      AvailabilityZone: !GetAtt GameServerInstance3.AvailabilityZone
+      Tags:
+        - Key: Name
+          Value: Game Web Data
+    DeletionPolicy: Snapshot
+
+  DiskMountPoint:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref GameServerInstance3
+      VolumeId: !Ref DiskVolume
+      Device: /dev/sdh
+
+  GameServerInstance4:
+    Type: AWS::EC2::Instance
+    Metadata:
+      'AWS::CloudFormation::Init':
+        configSets:
+          All:
+            - ConfigureSampleApp
+        ConfigureSampleApp:
+          packages:
+            yum:
+              httpd: []
+          files:
+            /var/www/html/index.html:
+              content: |
+                <img src="<https://s3.amazonaws.com/cloudformation-examples/cloudformation_graphic.png>" alt="AWS CloudFormation Logo"/>
+                <h1>Congratulations, you have successfully launched the AWS CloudFormation sample.</h1>
+              mode: 000644
+              owner: apache
+              group: apache
+          services:
+            sysvinit:
+              httpd:
+                enabled: true
+                ensureRunning: true
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-00ee4df451840fa9d
+      KeyName: !Ref EC2KeyPairUS
+      NetworkInterfaces:
+        - GroupSet:
+            - !Ref GameServerSG
+          AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          DeleteOnTermination: true
+          SubnetId:
+            Fn::ImportValue:
+              !Sub ${NetworkStackName}-Subnet4
+      Tags:
+        - Key: Name
+          Value: Game Server
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          yum update -y aws-cfn-bootstrap
+          # Install the files and packages from the metadata
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource GameServerInstance4 --configsets All --region ${AWS::Region}
+          # Signal the status from cfn-init
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource GameServerInstance4 --region ${AWS::Region}
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+
+  DiskVolume:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 20
+      AvailabilityZone: !GetAtt GameServerInstance4.AvailabilityZone
+      Tags:
+        - Key: Name
+          Value: Game Web Data
+    DeletionPolicy: Snapshot
+
+  DiskMountPoint:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref GameServerInstance4
+      VolumeId: !Ref DiskVolume
+      Device: /dev/sdh
+
+
+  GameServerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP ingress
+      VpcId:
+        Fn::ImportValue:
+          !Sub ${NetworkStackName}-USVPCID
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: Game Web Server Security Group
+  
+  GameConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: ami-00ee4df451840fa9d
+      KeyName: !Ref EC2KeyPairUS
+      InstanceType: t2.micro
+      SecurityGroups:
+        - Ref: GameServerSG
+  GameALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: gameserverALB
+      Type: application
+      SecurityGroups:
+        - !Ref GameServerSG
+      Subnets:
+        - !Ref PublicSubnet3
+        - !Ref PublicSubnet4
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: GameTG
+      Port: 80
+      Protocol: HTTP
+      VpcId:
+        Fn::ImportValue:
+          !Sub ${NetworkStackName}-USVPCID
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup   
+      LoadBalancerArn: !Ref GameALB
+      Port: 80
+      Protocol: HTTP
+  ASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: GasmeserverASG
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet3
+        - !Ref PublicSubnet4
+      Cooldown: 10
+      LaunchConfigurationName: !Ref GameConfig
+      MaxSize: 4
+      MinSize: 2
+      DesiredCapacity: 2
+      TargetGroupARNs:
+        - !Ref TargetGroup
+      Tags:
+        - Key: Name
+          Value: GameServer-ASG
+          PropagateAtLaunch: true
+
+  ASGPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref ASG
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 80
+      
+
+######################
+# Outputs section
+######################
+
+Outputs:
+  URL:
+    Description: URL of the Game website
+    Value: !Sub '<http://$>{GameServerInstance3.PublicDnsName}'
+  URL:
+    Description: URL of the Game website
+    Value: !Sub '<http://$>{GameServerInstance4.PublicDnsName}'
+
+  GameServerSG:
+    Description: The SecurityGroup ID to use for public game web servers
+    Value: !Ref GameServerSG
+    Export:
+      Name: !Sub '${AWS::StackName}-USSG'

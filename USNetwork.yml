@@ -1,0 +1,251 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  Network Template: USA template that creates a VPC with DNS and public IPs enabled.
+
+# This template creates:
+#   VPC
+#   Internet Gateway
+#   Public Route Table
+#   Public Subnet
+Parameters:
+  AZprivate1:
+    Description: AvailabilityZone for private
+    Type: AWS::EC2::AvailabilityZone::Name
+  AZprivate2:
+    Description: AvailabilityZone for private
+    Type: AWS::EC2::AvailabilityZone::Name
+  AZpublic1:
+    Description: AvailabilityZone for public
+    Type: AWS::EC2::AvailabilityZone::Name
+  AZpublic2:
+    Description: AvailabilityZone for public
+    Type: AWS::EC2::AvailabilityZone::Name
+######################
+######################
+# Resources section
+######################
+
+Resources:
+
+  ## VPC
+
+  USVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      CidrBlock: 10.1.0.0/16
+      Tags:
+        - Key: Name
+          Value: USVPC
+
+
+  ## Internet Gateway
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: USIGW
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref USVPC
+      InternetGatewayId: !Ref InternetGateway
+
+#Elastic IP b Setting
+
+  USEIPa:
+    Type: AWS::EC2::EIP
+    Properties:
+      Tags:
+        - Key: Name
+          Value: USEIPa
+
+#Nat Gateway a Setting
+
+  USNATa:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt USEIPa.AllocationId
+      SubnetId: !Ref PublicSubnet3
+      Tags:
+        - Key: Name
+          Value: USNATa
+
+#Elastic IP b Setting
+
+  USEIPb:
+    Type: AWS::EC2::EIP
+    Properties:
+      Tags:
+        - Key: Name
+          Value: USEIPb
+
+#Nat Gateway b Setting
+
+  USNATb:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt USEIPb.AllocationId
+      SubnetId: !Ref PublicSubnet4
+      Tags:
+        - Key: Name
+          Value: USNATb
+
+  ## Public Route Table
+
+  PublicRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref USVPC
+
+
+  PublicRTRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+
+  ## Private Route Table a
+
+  PrivateRTa:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref USVPC
+
+
+  PrivateRTaRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PrivateRTa
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref USNATa
+
+
+  ## Private Route Table b
+
+  PrivateRTb:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref USVPC
+
+
+  PrivateRTbRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PrivateRTb
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref USNATb
+
+
+
+
+  ## Public Subnet
+
+  PublicSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref USVPC
+      CidrBlock: 10.1.0.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Ref AZpublic1
+      Tags:
+        - Key: Name
+          Value: PublicSubnet3
+  PublicSubnet4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref USVPC
+      CidrBlock: 10.1.10.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Ref AZpublic2
+      Tags:
+        - Key: Name
+          Value: PublicSubnet4
+  PrivateSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref USVPC
+      CidrBlock: 10.1.20.0/24
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: !Ref AZprivate1
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet3
+  PrivateSubnet4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref USVPC
+      CidrBlock: 10.1.30.0/24
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: !Ref AZprivate2
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet4
+  PrivateRTASubnet3:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet3
+      RouteTableId: !Ref PrivateRTa
+
+  PublicRTASubnet3:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet3
+      RouteTableId: !Ref PublicRT
+
+  PrivateRTASubnet4:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet4
+      RouteTableId: !Ref PrivateRTb
+
+  PublicRTASubnet4:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet4
+      RouteTableId: !Ref PublicRT
+
+
+
+
+######################
+# Outputs section
+######################
+
+Outputs:
+
+  PublicSubnet3:
+    Description: The subnet ID to use for public game web servers
+    Value: !Ref PublicSubnet3
+    Export:
+      Name: !Sub '${AWS::StackName}-Subnet3'
+  PublicSubnet4:
+    Description: The subnet ID to use for public game web servers
+    Value: !Ref PublicSubnet4
+    Export:
+      Name: !Sub '${AWS::StackName}-Subnet4'
+  PrivateSubnet3:
+    Description: The subnet ID to use for private game web servers
+    Value: !Ref PrivateSubnet3
+    Export:
+      Name: !Sub '${AWS::StackName}-PSubnet3'
+  PrivateSubnet4:
+    Description: The subnet ID to use for private game web servers
+    Value: !Ref PrivateSubnet4
+    Export:
+      Name: !Sub '${AWS::StackName}-PSubnet4'
+
+  USVPC:
+    Description: VPC ID
+    Value: !Ref USVPC
+    Export:
+      Name: !Sub '${AWS::StackName}-USVPCID'
