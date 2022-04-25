@@ -1,0 +1,107 @@
+#Korea Subnet A RDS Setting
+#RDS Parameters Setting
+Parameters:
+  NetworkStackName:
+    Description: >-
+      Name of an active CloudFormation stack that contains the networking
+      resources, such as the VPC and subnet that will be used in this stack.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: '^[a-zA-Z][-a-zA-Z0-9]*$'
+    Default: Project-Network-Kor
+
+  ApplicationStackName:
+    Description: >-
+      Name of an active CloudFormation stack that contains the networking
+      resources, such as the securitygroup that will be used in this stack.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: '^[a-zA-Z][-a-zA-Z0-9]*$'
+    Default: Project-Application-Kor
+
+  DBInstanceID:
+    Default: dbinstane
+    Description: Database Instance Name
+    Type: String
+    MinLength: 1
+    MaxLength: 64
+    AllowedPattern: '[a-zA-Z][a-zA-z0-9]*'
+    ConstraintDescription: Must begin with a letter, Contain Only alphanumeric
+
+  DBName:
+    Default: db1
+    Description: Database Name
+    Type: String
+    MinLength: 1
+    MaxLength: 64
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: Must begin with a letter, Contain Only alphanumeric
+  
+  DBInstanceClass:
+    Default: db.t2.micro
+    Description: DB instance class
+    Type: String
+   
+    
+  DBUsername:
+    Default: admin
+    Description: Username for DB Access
+    Type: String
+     
+  DBPassword:
+    NoEcho: true
+    Description: Password for DB Access
+    Type: String
+    Default: project0000
+
+  DBAllocatedStorage:
+    Default: 20
+    Description: Size of Database (GiB)
+    Type: Number
+    MinValue: 20
+    MaxValue: 1000
+    ConstraintDescription: between 20 and 1000 GiB
+
+#DataBase Security Group Setting
+Resources:
+  KorSGforDB:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: allow webserver
+      GroupName: DBaccess
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          SourceSecurityGroupId:
+            Fn::ImportValue:
+              !Sub ${ApplicationStackName}-KorSG
+      VpcId:
+        Fn::ImportValue:
+          !Sub ${NetworkStackName}-KorVPCID
+#Subnet Group Setting
+  KorDBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: SubnetGroup for MySQL RDS
+      DBSubnetGroupName: KorDBSubnetGroup
+      SubnetIds:
+        - Fn::ImportValue:
+            !Sub ${NetworkStackName}-PSubnet1
+        - Fn::ImportValue:
+            !Sub ${NetworkStackName}-PSubnet2
+#Create RDS
+  KorRDS:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Ref DBInstanceID
+      DBName: !Ref DBName
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: MySQL
+      EngineVersion: 5.7.37
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      AllocatedStorage: !Ref DBAllocatedStorage
+      DBSubnetGroupName: !Ref KorDBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref KorSGforDB
